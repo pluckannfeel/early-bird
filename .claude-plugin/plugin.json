@@ -1,0 +1,27 @@
+{
+  "name": "early-bird",
+  "version": "0.1.0",
+  "description": "Wakes your Claude usage window early, so the 5-hour limit resets at the time you choose.",
+  "author": { "name": "Jarvis Padayao" },
+  "userConfig": {
+    "resetTime": {
+      "type": "string",
+      "title": "Reset time",
+      "description": "When you want the 5-hour usage window to reset, as HH:MM in your local time (24-hour). The greeting is sent 5 hours before it.",
+      "default": "13:00"
+    },
+    "days": {
+      "type": "string",
+      "title": "Days",
+      "description": "Which days to send the greeting.",
+      "default": "weekdays",
+      "options": ["weekdays", "daily"]
+    },
+    "timer": {
+      "type": "boolean",
+      "title": "Timer",
+      "description": "Keep the OS timer installed (systemd on Linux, launchd on macOS, Task Scheduler on Windows). Turn off, then start a session, to remove it.",
+      "default": true
+    }
+  }
+}

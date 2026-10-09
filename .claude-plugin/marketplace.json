@@ -1,0 +1,13 @@
+{
+  "name": "early-bird",
+  "description": "early-bird: make Claude's 5-hour usage limit reset at the time you choose.",
+  "owner": {
+    "name": "Jarvis Padayao"
+  },
+  "plugins": [
+    {
+      "name": "early-bird",
+      "source": "./"
+    }
+  ]
+}
