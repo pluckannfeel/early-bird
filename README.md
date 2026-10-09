@@ -37,16 +37,28 @@ window:
 5h 42% · resets in 2h14m
 ```
 
-To see the timer and when the next greeting goes out, run:
+### Change it any time with `/usage-window`
+
+| Command                  | What it does                                       |
+| ------------------------ | -------------------------------------------------- |
+| `/usage-window`          | Show the timer, the next greeting and your window  |
+| `/usage-window 12:00`    | Make your window reset at 12:00 (24-hour, local)   |
+| `/usage-window daily`    | Greet every day                                    |
+| `/usage-window weekdays` | Greet Monday to Friday (the default)               |
+| `/usage-window off`      | Remove the timer                                   |
+| `/usage-window on`       | Put the timer back                                 |
+
+Changes apply right away and stick across sessions. For example:
 
 ```
-/usage-window
+> /usage-window 12:00
+early-bird: greeting at 07:00 (Mon, Tue, Wed, Thu, Fri) → window resets at 12:00
 ```
 
-## Settings
+## Settings (optional)
 
-Change these in `~/.claude/settings.json`. Add this block, or edit it if it's
-already there, keeping your other settings as they are:
+You can also set the starting values in `~/.claude/settings.json`. Anything you
+change with `/usage-window` takes priority over these.
 
 ```json
 "pluginConfigs": {
@@ -60,17 +72,11 @@ already there, keeping your other settings as they are:
 }
 ```
 
-| Setting     | Default    | What it does                                   |
-| ----------- | ---------- | ---------------------------------------------- |
-| `resetTime` | `"13:00"`  | When your window should reset (24-hour, local) |
-| `days`      | `weekdays` | `"weekdays"` (Mon–Fri) or `"daily"`            |
-| `timer`     | `true`     | `false` removes the timer                      |
-
-A change takes effect the next time you start Claude Code. Run `/usage-window`
-to check it.
-
-> Depending on your Claude Code version, these may also show up in `/config`
-> (type `early-bird` to find them).
+| Setting     | Default      | What it does                                   |
+| ----------- | ------------ | ---------------------------------------------- |
+| `resetTime` | `"13:00"`    | When your window should reset (24-hour, local) |
+| `days`      | `"weekdays"` | `"weekdays"` (Mon–Fri) or `"daily"`            |
+| `timer`     | `true`       | `false` removes the timer                      |
 
 ## Good to know
 
@@ -85,8 +91,7 @@ to check it.
 
 ## Uninstall
 
-1. Set `"timer": false` (see [Settings](#settings)), then start Claude Code
-   once. This removes the timer.
+1. Run `/usage-window off`. This removes the timer.
 2. Uninstall the plugin with `/plugin`.
 
 <details>

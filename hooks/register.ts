@@ -1,18 +1,20 @@
 // early-bird: line up the 5-hour usage window with the workday.
 //
 // A plugin only runs while a session is open, so it does not send the
-// greeting itself: at session start it installs (or updates, or removes) an
-// OS timer that does, and while you work it shows the live window in the
-// status line.
+// greeting itself: at session start, and when /usage-window changes it, it
+// installs (or updates, or removes) an OS timer that does. While you work it
+// shows the live window in the status line.
 
-import type { EngineInterface, Register, Timer } from "claude-code";
+import type { EngineInterface, PluginOptions, Register, Timer } from "claude-code";
 
 import {
   LAUNCHD_LABEL,
   NAME,
+  clock,
   countdown,
   describe,
   launchdPlist,
+  parseTime,
   schedule,
   systemdService,
   systemdTimer,
@@ -24,18 +26,22 @@ import type { Days, Platform, Schedule } from "./schedule.ts";
 
 type $ = EngineInterface;
 
+// What /usage-window changed; each one wins over the plugin's options.
+type Choices = { resetTime?: string; days?: Days; timer?: boolean };
 type Config = { resetText: string; isOn: boolean; wanted: Schedule | null };
 
 // Bump when the timer files change shape, so existing installs are rewritten.
 const FORMAT = 1;
 
-export const register: Register = (on, options) => {
-  const resetText = String(options.resetTime ?? "13:00");
-  const days: Days = options.days === "daily" ? "daily" : "weekdays";
-  const isOn = options.timer !== false;
-  const wanted = schedule(resetText, days);
+const HELP = `early-bird: /usage-window takes one of
+  HH:MM      the time your window should reset, e.g. /usage-window 12:00
+  daily      greet every day
+  weekdays   greet Monday to Friday
+  off        remove the timer
+  on         put the timer back
+  (nothing)  show the timer and the current window`;
 
-  let platform: Platform | undefined;
+export const register: Register = (on, options) => {
   let problem: string | undefined;
   let tick: Timer | undefined;
 
@@ -43,18 +49,15 @@ export const register: Register = (on, options) => {
     const result = await next(e);
     await $.command.register({
       name: "usage-window",
-      description: "Show the early-bird timer and the current 5-hour window",
+      description: "Show or change the early-bird timer",
+      argumentHint: "[HH:MM | daily | weekdays | on | off]",
     });
     if (!e.isInteractive) return result;
 
-    try {
-      platform = await detect($);
-      await reconcile($, platform, { resetText, isOn, wanted });
-      problem = undefined;
-    } catch (err) {
-      problem = err instanceof Error ? err.message : String(err);
-      $.ui.toast(`early-bird: ${problem}`);
-    }
+    const applied = await apply($, options);
+    problem = applied.problem;
+    const notice = applied.problem ?? applied.changed;
+    if (notice) $.ui.toast(`early-bird: ${notice}`);
     await showWindow($);
     tick ??= $.clock.every(60_000, () => void showWindow($));
     return result;
@@ -66,33 +69,90 @@ export const register: Register = (on, options) => {
     return result;
   });
 
-  on("command.run", { command: "usage-window" }, async ($) => {
-    platform ??= await detect($);
-    const lines = ["early-bird"];
-    if (problem) {
-      lines.push(`  Timer: not set up: ${problem}`);
-    } else if (!isOn || !wanted) {
-      lines.push("  Timer: off");
-    } else {
-      lines.push(`  Timer: on (${MANAGER[platform]}): ${describe(wanted)}`);
-      const nextRun = await nextGreeting($, platform);
-      if (nextRun) lines.push(`  Next greeting: ${nextRun}`);
-    }
-    const window = await fiveHour($);
-    lines.push(
-      window
-        ? `  Now: ${window.used}% of the 5-hour window used${window.left ? `, resets in ${window.left}` : ""}`
-        : "  Now: no 5-hour window reported (an API key, or no request yet)",
-    );
-    lines.push('  Change it under "pluginConfigs" → "early-bird" in ~/.claude/settings.json.');
-    return { text: lines.join("\n") };
+  on("command.run", { command: "usage-window" }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase();
+    if (!arg) return { text: await status($, options, problem) };
+
+    const change = parseChange(arg);
+    if (typeof change === "string") return { text: `early-bird: ${change}` };
+    if (!change) return { text: HELP };
+
+    await $.store.set("choices", { ...(await choices($)), ...change });
+    const applied = await apply($, options);
+    problem = applied.problem;
+    const head = applied.problem
+      ? `early-bird: ${applied.problem}`
+      : `early-bird: ${applied.changed ?? "no change"}`;
+    return { text: `${head}\n\n${await status($, options, problem)}` };
   });
 };
 
-// Install, update or remove the timer so it matches the options. The key
-// in $.store says what was last installed, so an unchanged setup costs one
-// file check per session.
-async function reconcile($: $, platform: Platform, cfg: Config) {
+// The options, with what /usage-window changed laid over them.
+function configure(options: PluginOptions, chosen: Choices): Config {
+  const resetText = chosen.resetTime ?? String(options.resetTime ?? "13:00");
+  const days: Days = (chosen.days ?? options.days) === "daily" ? "daily" : "weekdays";
+  const isOn = chosen.timer ?? options.timer !== false;
+  return { resetText, isOn, wanted: schedule(resetText, days) };
+}
+
+async function choices($: $): Promise<Choices> {
+  const saved = await $.store.get("choices");
+  return saved && typeof saved === "object" ? (saved as Choices) : {};
+}
+
+// One /usage-window argument: a change, an error to show, or null for help.
+function parseChange(arg: string): Choices | string | null {
+  if (/^\d{1,2}:\d{2}$/.test(arg)) {
+    const time = parseTime(arg);
+    return time
+      ? { resetTime: clock(time.hour, time.minute) }
+      : `"${arg}" is not a 24-hour time (00:00 to 23:59)`;
+  }
+  if (arg === "daily" || arg === "weekdays") return { days: arg };
+  if (arg === "on" || arg === "off") return { timer: arg === "on" };
+  return null;
+}
+
+async function apply(
+  $: $,
+  options: PluginOptions,
+): Promise<{ problem?: string; changed?: string }> {
+  try {
+    const platform = await detect($);
+    const changed = await reconcile($, platform, configure(options, await choices($)));
+    return { changed };
+  } catch (err) {
+    return { problem: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function status($: $, options: PluginOptions, problem: string | undefined) {
+  const platform = await detect($);
+  const { isOn, wanted } = configure(options, await choices($));
+  const lines = ["early-bird"];
+  if (problem) {
+    lines.push(`  Timer: not set up: ${problem}`);
+  } else if (!isOn || !wanted) {
+    lines.push("  Timer: off");
+  } else {
+    lines.push(`  Timer: on (${MANAGER[platform]}): ${describe(wanted)}`);
+    const nextRun = await nextGreeting($, platform);
+    if (nextRun) lines.push(`  Next greeting: ${nextRun}`);
+  }
+  const window = await fiveHour($);
+  lines.push(
+    window
+      ? `  Now: ${window.used}% of the 5-hour window used${window.left ? `, resets in ${window.left}` : ""}`
+      : "  Now: no 5-hour window reported (an API key, or no request yet)",
+  );
+  lines.push("  Change it: /usage-window HH:MM | daily | weekdays | on | off");
+  return lines.join("\n");
+}
+
+// Install, update or remove the timer so it matches the config, and say what
+// changed. The key in $.store says what was last installed, so an unchanged
+// setup costs one file check.
+async function reconcile($: $, platform: Platform, cfg: Config): Promise<string | undefined> {
   const { resetText, isOn, wanted } = cfg;
   if (isOn && !wanted) {
     throw new Error(`reset time "${resetText}" is not HH:MM (24-hour)`);
@@ -100,17 +160,16 @@ async function reconcile($: $, platform: Platform, cfg: Config) {
   const key = isOn && wanted ? `${FORMAT}|${platform}|${describe(wanted)}` : "off";
   const applied = await $.store.get("applied");
   if (applied === key && (key === "off" || (await isInstalled($, platform)))) {
-    return;
+    return undefined;
   }
   if (key === "off" || !wanted) {
     if (applied !== undefined) await uninstall($, platform);
     await $.store.set("applied", "off");
-    if (applied !== undefined) $.ui.toast("early-bird: timer removed");
-    return;
+    return applied !== undefined ? "timer removed" : undefined;
   }
   await install($, platform, wanted);
   await $.store.set("applied", key);
-  $.ui.toast(`early-bird: ${describe(wanted)}`);
+  return describe(wanted);
 }
 
 const MANAGER: Record<Platform, string> = {

@@ -90,11 +90,11 @@ function answer(argv: readonly string[], os: Os): ProcessRunResult {
 const start = ($: Engine, isInteractive = true) =>
   $.session.start({ cwd: "/", surface: "terminal", isInteractive });
 
-const usageWindow = async ($: Engine) =>
+const usageWindow = async ($: Engine, args = "") =>
   (
     await $.command.run({
       command: "usage-window",
-      args: "",
+      args,
       origin: { kind: "composer" },
       presentation: { isFullscreen: false, columns: 100 },
     })
@@ -249,5 +249,59 @@ describe("/usage-window", () => {
     );
     expect(text).toContain("Next greeting: Mon 2026-10-12 08:00:00 JST");
     expect(text).toContain("Now: 42% of the 5-hour window used, resets in 2h14m");
+  });
+
+  test("moves the reset time and rewrites the timer at once", async ($, on) => {
+    const world = machine(on);
+    await start($);
+    const text = await usageWindow($, "12:00");
+    expect(text).toStartWith(
+      "early-bird: greeting at 07:00 (Mon, Tue, Wed, Thu, Fri) → window resets at 12:00",
+    );
+    expect(world.writes[`${SYSTEMD}.timer`]).toContain("Mon,Tue,Wed,Thu,Fri *-*-* 07:00:00");
+  });
+
+  test("keeps its changes in later sessions", async ($, on) => {
+    const world = machine(on);
+    await start($);
+    await usageWindow($, "9:15");
+    await usageWindow($, "daily");
+    const runs = world.runs.length;
+    await start($);
+    expect(world.writes[`${SYSTEMD}.timer`]).toContain("OnCalendar=*-*-* 04:15:00");
+    expect(world.runs.slice(runs).some((argv) => argv[0] === "systemctl")).toBe(false);
+  });
+
+  test("wins over the plugin's options", { options: { resetTime: "10:00" } }, async ($, on) => {
+    const world = machine(on);
+    await start($);
+    expect(world.writes[`${SYSTEMD}.timer`]).toContain("05:00:00");
+    await usageWindow($, "14:00");
+    expect(world.writes[`${SYSTEMD}.timer`]).toContain("09:00:00");
+  });
+
+  test("turns the timer off and back on", async ($, on) => {
+    const world = machine(on);
+    await start($);
+    expect(await usageWindow($, "off")).toStartWith("early-bird: timer removed");
+    expect(world.ran("systemctl --user disable --now claude-usage-reset.timer")).toBe(true);
+    expect(await usageWindow($)).toContain("Timer: off");
+    expect(await usageWindow($, "ON")).toStartWith("early-bird: greeting at 08:00");
+  });
+
+  test("refuses a time that does not exist", async ($, on) => {
+    const world = machine(on);
+    await start($);
+    const writes = Object.keys(world.writes).length;
+    expect(await usageWindow($, "25:00")).toBe(
+      'early-bird: "25:00" is not a 24-hour time (00:00 to 23:59)',
+    );
+    expect(Object.keys(world.writes)).toHaveLength(writes);
+  });
+
+  test("explains itself for anything else", async ($, on) => {
+    machine(on);
+    await start($);
+    expect(await usageWindow($, "1pm")).toContain("/usage-window takes one of");
   });
 });
