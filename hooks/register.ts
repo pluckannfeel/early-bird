@@ -84,7 +84,7 @@ export const register: Register = (on, options) => {
         ? `  Now: ${window.used}% of the 5-hour window used${window.left ? `, resets in ${window.left}` : ""}`
         : "  Now: no 5-hour window reported (an API key, or no request yet)",
     );
-    lines.push("  Change the time, the days or turn the timer off in /config.");
+    lines.push('  Change it under "pluginConfigs" → "early-bird" in ~/.claude/settings.json.');
     return { text: lines.join("\n") };
   });
 };

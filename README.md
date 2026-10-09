@@ -45,13 +45,32 @@ To see the timer and when the next greeting goes out, run:
 
 ## Settings
 
-Change these any time in `/config`. They take effect in your next session.
+Change these in `~/.claude/settings.json`. Add this block, or edit it if it's
+already there, keeping your other settings as they are:
 
-| Setting        | Default    | What it does                                     |
-| -------------- | ---------- | ------------------------------------------------ |
-| **Reset time** | `13:00`    | When your window should reset (24-hour, local)   |
-| **Days**       | `weekdays` | `weekdays` (Mon–Fri) or `daily`                  |
-| **Timer**      | on         | Turn off to remove the timer                     |
+```json
+"pluginConfigs": {
+  "early-bird": {
+    "options": {
+      "resetTime": "13:00",
+      "days": "weekdays",
+      "timer": true
+    }
+  }
+}
+```
+
+| Setting     | Default    | What it does                                   |
+| ----------- | ---------- | ---------------------------------------------- |
+| `resetTime` | `"13:00"`  | When your window should reset (24-hour, local) |
+| `days`      | `weekdays` | `"weekdays"` (Mon–Fri) or `"daily"`            |
+| `timer`     | `true`     | `false` removes the timer                      |
+
+A change takes effect the next time you start Claude Code. Run `/usage-window`
+to check it.
+
+> Depending on your Claude Code version, these may also show up in `/config`
+> (type `early-bird` to find them).
 
 ## Good to know
 
@@ -66,8 +85,8 @@ Change these any time in `/config`. They take effect in your next session.
 
 ## Uninstall
 
-1. In `/config`, turn **Timer** off, then start a new session. This removes the
-   timer.
+1. Set `"timer": false` (see [Settings](#settings)), then start Claude Code
+   once. This removes the timer.
 2. Uninstall the plugin with `/plugin`.
 
 <details>
