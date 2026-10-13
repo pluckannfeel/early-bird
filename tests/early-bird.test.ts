@@ -256,7 +256,7 @@ describe("/usage-window", () => {
     await start($);
     const text = await usageWindow($, "12:00");
     expect(text).toStartWith(
-      "early-bird: greeting at 07:00 (Mon, Tue, Wed, Thu, Fri) → window resets at 12:00",
+      "greeting at 07:00 (Mon, Tue, Wed, Thu, Fri) → window resets at 12:00",
     );
     expect(world.writes[`${SYSTEMD}.timer`]).toContain("Mon,Tue,Wed,Thu,Fri *-*-* 07:00:00");
   });
@@ -283,10 +283,10 @@ describe("/usage-window", () => {
   test("turns the timer off and back on", async ($, on) => {
     const world = machine(on);
     await start($);
-    expect(await usageWindow($, "off")).toStartWith("early-bird: timer removed");
+    expect(await usageWindow($, "off")).toStartWith("timer removed");
     expect(world.ran("systemctl --user disable --now claude-usage-reset.timer")).toBe(true);
     expect(await usageWindow($)).toContain("Timer: off");
-    expect(await usageWindow($, "ON")).toStartWith("early-bird: greeting at 08:00");
+    expect(await usageWindow($, "ON")).toStartWith("greeting at 08:00");
   });
 
   test("refuses a time that does not exist", async ($, on) => {
@@ -294,7 +294,7 @@ describe("/usage-window", () => {
     await start($);
     const writes = Object.keys(world.writes).length;
     expect(await usageWindow($, "25:00")).toBe(
-      'early-bird: "25:00" is not a 24-hour time (00:00 to 23:59)',
+      '"25:00" is not a 24-hour time (00:00 to 23:59)',
     );
     expect(Object.keys(world.writes)).toHaveLength(writes);
   });

@@ -33,7 +33,7 @@ type Config = { resetText: string; isOn: boolean; wanted: Schedule | null };
 // Bump when the timer files change shape, so existing installs are rewritten.
 const FORMAT = 1;
 
-const HELP = `early-bird: /usage-window takes one of
+const HELP = `/usage-window takes one of
   HH:MM      the time your window should reset, e.g. /usage-window 12:00
   daily      greet every day
   weekdays   greet Monday to Friday
@@ -74,15 +74,14 @@ export const register: Register = (on, options) => {
     if (!arg) return { text: await status($, options, problem) };
 
     const change = parseChange(arg);
-    if (typeof change === "string") return { text: `early-bird: ${change}` };
+    if (typeof change === "string") return { text: change };
     if (!change) return { text: HELP };
 
     await $.store.set("choices", { ...(await choices($)), ...change });
     const applied = await apply($, options);
     problem = applied.problem;
-    const head = applied.problem
-      ? `early-bird: ${applied.problem}`
-      : `early-bird: ${applied.changed ?? "no change"}`;
+    // Claude Code puts the plugin's name in front of a command's output.
+    const head = applied.problem ?? applied.changed ?? "no change";
     return { text: `${head}\n\n${await status($, options, problem)}` };
   });
 };
@@ -129,23 +128,23 @@ async function apply(
 async function status($: $, options: PluginOptions, problem: string | undefined) {
   const platform = await detect($);
   const { isOn, wanted } = configure(options, await choices($));
-  const lines = ["early-bird"];
+  const lines: string[] = [];
   if (problem) {
-    lines.push(`  Timer: not set up: ${problem}`);
+    lines.push(`Timer: not set up: ${problem}`);
   } else if (!isOn || !wanted) {
-    lines.push("  Timer: off");
+    lines.push("Timer: off");
   } else {
-    lines.push(`  Timer: on (${MANAGER[platform]}): ${describe(wanted)}`);
+    lines.push(`Timer: on (${MANAGER[platform]}): ${describe(wanted)}`);
     const nextRun = await nextGreeting($, platform);
-    if (nextRun) lines.push(`  Next greeting: ${nextRun}`);
+    if (nextRun) lines.push(`Next greeting: ${nextRun}`);
   }
   const window = await fiveHour($);
   lines.push(
     window
-      ? `  Now: ${window.used}% of the 5-hour window used${window.left ? `, resets in ${window.left}` : ""}`
-      : "  Now: no 5-hour window reported (an API key, or no request yet)",
+      ? `Now: ${window.used}% of the 5-hour window used${window.left ? `, resets in ${window.left}` : ""}`
+      : "Now: no 5-hour window reported (an API key, or no request yet)",
   );
-  lines.push("  Change it: /usage-window HH:MM | daily | weekdays | on | off");
+  lines.push("Change it: /usage-window HH:MM | daily | weekdays | on | off");
   return lines.join("\n");
 }
 

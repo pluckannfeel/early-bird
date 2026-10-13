@@ -2,7 +2,18 @@
   "name": "early-bird",
   "version": "0.1.0",
   "description": "Wakes your Claude usage window early, so the 5-hour limit resets at the time you choose.",
-  "author": { "name": "Jarvis Padayao" },
+  "author": {
+    "name": "Jarvis Padayao"
+  },
+  "homepage": "https://github.com/pluckannfeel/early-bird",
+  "repository": "https://github.com/pluckannfeel/early-bird",
+  "license": "MIT",
+  "keywords": [
+    "usage",
+    "rate-limit",
+    "scheduler",
+    "productivity"
+  ],
   "userConfig": {
     "resetTime": {
       "type": "string",
@@ -15,7 +26,10 @@
       "title": "early-bird: Days",
       "description": "Which days to send the greeting.",
       "default": "weekdays",
-      "options": ["weekdays", "daily"]
+      "options": [
+        "weekdays",
+        "daily"
+      ]
     },
     "timer": {
       "type": "boolean",
