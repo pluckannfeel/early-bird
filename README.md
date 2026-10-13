@@ -113,3 +113,7 @@ Unregister-ScheduledTask -TaskName 'Claude usage reset' -Confirm:$false
 ```
 
 </details>
+
+## License
+
+MIT. See [LICENSE](LICENSE).
