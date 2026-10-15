@@ -57,7 +57,9 @@ export const register: Register = (on, options) => {
     const applied = await apply($, options);
     problem = applied.problem;
     const notice = applied.problem ?? applied.changed;
-    if (notice) $.ui.toast(`early-bird: ${notice}`);
+    if (notice) {
+      $.ui.toast(`early-bird: ${notice}`);
+    }
     await showWindow($);
     tick ??= $.clock.every(60_000, () => void showWindow($));
     return result;
@@ -71,18 +73,23 @@ export const register: Register = (on, options) => {
 
   on("command.run", { command: "usage-window" }, async ($, e) => {
     const arg = e.args.trim().toLowerCase();
-    if (!arg) return { text: await status($, options, problem) };
+    if (!arg) {
+      const text = await status($, options, problem);
+      return { text };
+    }
 
     const change = parseChange(arg);
     if (typeof change === "string") return { text: change };
     if (!change) return { text: HELP };
 
-    await $.store.set("choices", { ...(await choices($)), ...change });
+    const chosen = await choices($);
+    await $.store.set("choices", { ...chosen, ...change });
     const applied = await apply($, options);
     problem = applied.problem;
     // Claude Code puts the plugin's name in front of a command's output.
     const head = applied.problem ?? applied.changed ?? "no change";
-    return { text: `${head}\n\n${await status($, options, problem)}` };
+    const now = await status($, options, problem);
+    return { text: `${head}\n\n${now}` };
   });
 };
 
@@ -118,7 +125,8 @@ async function apply(
 ): Promise<{ problem?: string; changed?: string }> {
   try {
     const platform = await detect($);
-    const changed = await reconcile($, platform, configure(options, await choices($)));
+    const chosen = await choices($);
+    const changed = await reconcile($, platform, configure(options, chosen));
     return { changed };
   } catch (err) {
     return { problem: err instanceof Error ? err.message : String(err) };
@@ -202,12 +210,14 @@ const powershell = (script: string) => [
 
 async function claudePath($: $, platform: Platform): Promise<string> {
   if (platform === "windows") {
-    const found = (await run($, ["where.exe", "claude"])).split(/\r?\n/).map((l) => l.trim());
+    const where = await run($, ["where.exe", "claude"]);
+    const found = where.split(/\r?\n/).map((l) => l.trim());
     const exe = found.find((l) => /\.(exe|cmd)$/i.test(l)) ?? found[0];
     if (!exe) throw new Error("claude is not on PATH");
     return exe;
   }
-  const found = (await run($, ["sh", "-c", "command -v claude"])).trim();
+  const which = await run($, ["sh", "-c", "command -v claude"]);
+  const found = which.trim();
   if (!found) throw new Error("claude is not on PATH");
   return found;
 }
@@ -228,8 +238,14 @@ async function plistPath($: $): Promise<string> {
 }
 
 async function isInstalled($: $, platform: Platform): Promise<boolean> {
-  if (platform === "linux") return $.fs.exists(`${await systemdDir($)}/${NAME}.timer`);
-  if (platform === "macos") return $.fs.exists(await plistPath($));
+  if (platform === "linux") {
+    const dir = await systemdDir($);
+    return $.fs.exists(`${dir}/${NAME}.timer`);
+  }
+  if (platform === "macos") {
+    const plist = await plistPath($);
+    return $.fs.exists(plist);
+  }
   return true; // Task Scheduler: trust what was last registered
 }
 
@@ -247,7 +263,8 @@ async function install($: $, platform: Platform, s: Schedule) {
     await run($, ["systemctl", "--user", "restart", `${NAME}.timer`]);
   } else if (platform === "macos") {
     const plist = await plistPath($);
-    const domain = `gui/${(await run($, ["id", "-u"])).trim()}`;
+    const uid = await run($, ["id", "-u"]);
+    const domain = `gui/${uid.trim()}`;
     await run($, ["mkdir", "-p", plist.slice(0, plist.lastIndexOf("/"))]);
     await $.fs.write(plist, launchdPlist(s, claude, path));
     await $.process.run(["launchctl", "bootout", domain, plist]); // not loaded yet is fine
@@ -265,7 +282,8 @@ async function uninstall($: $, platform: Platform) {
     await run($, ["systemctl", "--user", "daemon-reload"]);
   } else if (platform === "macos") {
     const plist = await plistPath($);
-    const domain = `gui/${(await run($, ["id", "-u"])).trim()}`;
+    const uid = await run($, ["id", "-u"]);
+    const domain = `gui/${uid.trim()}`;
     await $.process.run(["launchctl", "bootout", domain, plist]);
     await run($, ["rm", "-f", plist]);
   } else {

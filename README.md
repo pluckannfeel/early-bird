@@ -89,6 +89,52 @@ change with `/usage-window` takes priority over these.
 - **Needs a Claude subscription** (Pro or Max). API-key users don't have a
   5-hour window.
 
+## What early-bird does on your computer
+
+early-bird only acts at session start, after each turn, and when you run
+`/usage-window`. It does nothing in a non-interactive (`claude -p`) session.
+
+**What it sends, and where.** early-bird itself makes no network calls and
+reads nothing from your conversation. The only thing that leaves your
+computer is the timer's greeting. Once a day (weekdays by default) your OS
+scheduler runs:
+
+```sh
+claude --print --no-session-persistence --safe-mode --effort low --tools "" \
+  --system-prompt "Reply with OK." "Good morning."
+```
+
+That is your own Claude Code, signed in as you, sending the fixed text
+"Good morning." to Anthropic, with no tools and no saved session. The status
+line reads your 5-hour usage from Claude Code; that is not sent anywhere.
+
+**Programs it starts, and why.**
+
+| Program                                          | Why                                                  |
+| ------------------------------------------------ | ---------------------------------------------------- |
+| `uname -s`                                       | Tell Linux from macOS                                |
+| `sh -c "command -v claude"` / `where.exe claude` | Find your `claude`, so the timer can run it          |
+| `mkdir -p`, `rm -f`                              | Create the timer's folder; delete its files on `off` |
+| `systemctl --user` (Linux)                       | Load, enable, restart, read or disable the timer     |
+| `id -u`, `launchctl` (macOS)                     | Load or unload the launchd agent                     |
+| `powershell.exe` (Windows)                       | Register, read or remove the scheduled task          |
+
+On Windows the PowerShell script is built in `hooks/schedule.ts`
+(`windowsRegister`, `windowsNextRun`, `windowsUnregister`). It only calls
+`Register-ScheduledTask`, `Get-ScheduledTaskInfo` and
+`Unregister-ScheduledTask`, for the task named `Claude usage reset`.
+
+**Files it writes.** These are start-up files your OS scheduler obeys. That is
+the point of the plugin, and they hold only the schedule above:
+
+- Linux: `~/.config/systemd/user/claude-usage-reset.service` and `.timer`
+- macOS: `~/Library/LaunchAgents/local.claude-usage-reset.plist`
+- Windows: no file; a Task Scheduler task named `Claude usage reset`
+
+**Your permissions.** early-bird's `command.run` hook answers only its own
+`/usage-window` command. It never changes permission modes, settings, other
+commands or tool calls.
+
 ## Uninstall
 
 1. Run `/usage-window off`. This removes the timer.
@@ -117,3 +163,6 @@ Unregister-ScheduledTask -TaskName 'Claude usage reset' -Confirm:$false
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Icon by [Magnific](https://www.flaticon.com/authors/magnific) from
+[Flaticon](https://www.flaticon.com/).
