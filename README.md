@@ -163,3 +163,6 @@ Unregister-ScheduledTask -TaskName 'Claude usage reset' -Confirm:$false
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Icon by [Magnific](https://www.flaticon.com/authors/magnific) from
+[Flaticon](https://www.flaticon.com/).
