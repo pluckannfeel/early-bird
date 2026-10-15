@@ -24,7 +24,7 @@ import {
 } from "./schedule.ts";
 import type { Days, Platform, Schedule } from "./schedule.ts";
 
-type $ = EngineInterface;
+type Engine = EngineInterface;
 
 // What /usage-window changed; each one wins over the plugin's options.
 type Choices = { resetTime?: string; days?: Days; timer?: boolean };
@@ -101,7 +101,7 @@ function configure(options: PluginOptions, chosen: Choices): Config {
   return { resetText, isOn, wanted: schedule(resetText, days) };
 }
 
-async function choices($: $): Promise<Choices> {
+async function choices($: Engine): Promise<Choices> {
   const saved = await $.store.get("choices");
   return saved && typeof saved === "object" ? (saved as Choices) : {};
 }
@@ -120,7 +120,7 @@ function parseChange(arg: string): Choices | string | null {
 }
 
 async function apply(
-  $: $,
+  $: Engine,
   options: PluginOptions,
 ): Promise<{ problem?: string; changed?: string }> {
   try {
@@ -133,7 +133,7 @@ async function apply(
   }
 }
 
-async function status($: $, options: PluginOptions, problem: string | undefined) {
+async function status($: Engine, options: PluginOptions, problem: string | undefined) {
   const platform = await detect($);
   const { isOn, wanted } = configure(options, await choices($));
   const lines: string[] = [];
@@ -159,7 +159,7 @@ async function status($: $, options: PluginOptions, problem: string | undefined)
 // Install, update or remove the timer so it matches the config, and say what
 // changed. The key in $.store says what was last installed, so an unchanged
 // setup costs one file check.
-async function reconcile($: $, platform: Platform, cfg: Config): Promise<string | undefined> {
+async function reconcile($: Engine, platform: Platform, cfg: Config): Promise<string | undefined> {
   const { resetText, isOn, wanted } = cfg;
   if (isOn && !wanted) {
     throw new Error(`reset time "${resetText}" is not HH:MM (24-hour)`);
@@ -185,13 +185,13 @@ const MANAGER: Record<Platform, string> = {
   windows: "Task Scheduler",
 };
 
-async function detect($: $): Promise<Platform> {
+async function detect($: Engine): Promise<Platform> {
   if ((await $.env.get("OS")) === "Windows_NT") return "windows";
   const uname = await $.process.run(["uname", "-s"]);
   return uname.stdout.trim() === "Darwin" ? "macos" : "linux";
 }
 
-async function run($: $, argv: string[]): Promise<string> {
+async function run($: Engine, argv: string[]): Promise<string> {
   const r = await $.process.run(argv, { timeoutMs: 60_000 });
   if (r.exitCode !== 0) {
     const why = (r.stderr || r.stdout).trim().split("\n")[0] || `exit ${r.exitCode}`;
@@ -208,7 +208,7 @@ const powershell = (script: string) => [
   script,
 ];
 
-async function claudePath($: $, platform: Platform): Promise<string> {
+async function claudePath($: Engine, platform: Platform): Promise<string> {
   if (platform === "windows") {
     const where = await run($, ["where.exe", "claude"]);
     const found = where.split(/\r?\n/).map((l) => l.trim());
@@ -222,22 +222,22 @@ async function claudePath($: $, platform: Platform): Promise<string> {
   return found;
 }
 
-async function home($: $): Promise<string> {
+async function home($: Engine): Promise<string> {
   const dir = await $.env.get("HOME");
   if (!dir) throw new Error("HOME is not set");
   return dir;
 }
 
-async function systemdDir($: $): Promise<string> {
+async function systemdDir($: Engine): Promise<string> {
   const config = (await $.env.get("XDG_CONFIG_HOME")) ?? `${await home($)}/.config`;
   return `${config}/systemd/user`;
 }
 
-async function plistPath($: $): Promise<string> {
+async function plistPath($: Engine): Promise<string> {
   return `${await home($)}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`;
 }
 
-async function isInstalled($: $, platform: Platform): Promise<boolean> {
+async function isInstalled($: Engine, platform: Platform): Promise<boolean> {
   if (platform === "linux") {
     const dir = await systemdDir($);
     return $.fs.exists(`${dir}/${NAME}.timer`);
@@ -249,7 +249,7 @@ async function isInstalled($: $, platform: Platform): Promise<boolean> {
   return true; // Task Scheduler: trust what was last registered
 }
 
-async function install($: $, platform: Platform, s: Schedule) {
+async function install($: Engine, platform: Platform, s: Schedule) {
   const claude = await claudePath($, platform);
   const path = (await $.env.get("PATH")) ?? "/usr/local/bin:/usr/bin:/bin";
 
@@ -274,7 +274,7 @@ async function install($: $, platform: Platform, s: Schedule) {
   }
 }
 
-async function uninstall($: $, platform: Platform) {
+async function uninstall($: Engine, platform: Platform) {
   if (platform === "linux") {
     const dir = await systemdDir($);
     await $.process.run(["systemctl", "--user", "disable", "--now", `${NAME}.timer`]);
@@ -291,7 +291,7 @@ async function uninstall($: $, platform: Platform) {
   }
 }
 
-async function nextGreeting($: $, platform: Platform): Promise<string | undefined> {
+async function nextGreeting($: Engine, platform: Platform): Promise<string | undefined> {
   const argv =
     platform === "linux"
       ? ["systemctl", "--user", "show", `${NAME}.timer`, "-p", "NextElapseUSecRealtime", "--value"]
@@ -303,7 +303,7 @@ async function nextGreeting($: $, platform: Platform): Promise<string | undefine
   return r.exitCode === 0 && r.stdout.trim() ? r.stdout.trim() : undefined;
 }
 
-async function fiveHour($: $): Promise<{ used: number; left?: string } | undefined> {
+async function fiveHour($: Engine): Promise<{ used: number; left?: string } | undefined> {
   const { rateLimits } = await $.session.usage();
   const window = rateLimits.find((r) => r.kind === "five_hour");
   if (!window) return undefined;
@@ -311,7 +311,7 @@ async function fiveHour($: $): Promise<{ used: number; left?: string } | undefin
   return { used: Math.round(window.percentUsed), left: ms > 0 ? countdown(ms) : undefined };
 }
 
-async function showWindow($: $) {
+async function showWindow($: Engine) {
   const window = await fiveHour($);
   $.ui.status(
     window ? `5h ${window.used}%${window.left ? ` · resets in ${window.left}` : ""}` : undefined,
